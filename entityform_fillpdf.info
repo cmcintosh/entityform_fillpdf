@@ -1,0 +1,8 @@
+name = EntityForm FillPDF
+description = Allows users to populate PDF forms from entityform data.
+package = Entityforms
+core = 7.x
+
+dependencies[] = entityform
+dependencies[] = fillpdf
+dependencies[] = fillpdf_entity

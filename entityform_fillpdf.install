@@ -1,0 +1,28 @@
+<?php
+
+/**
+* Implements hook_schema
+*/
+function entityform_fillpdf_schema() {
+  $schema['entityform_fillpdf'] = array(
+    'description' => t('Provides a mapping between entityform entities and fillpdf files.'),
+    'fields' => array(
+      'bundle' => array(
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'fid' => array(
+        'type' => 'int'
+      )
+    ),
+  );
+  return $schema;
+}
+
+/**
+* Implements hook_update_7001
+* - Create database table for tracking attached PDFs.
+*/
+function entityform_fillpdf_update_7001() {
+  db_create_table('entityform_fillpdf', drupal_get_schema_unprocessed('entityform_fillpdf', 'entityform_fillpdf'));
+}
