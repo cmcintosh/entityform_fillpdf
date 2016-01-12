@@ -37,17 +37,42 @@ function entityform_fillpdf_generate($entity) {
     ->condition('f.bundle', $entity->type);
   $fid = $query->execute()->fetchField();
 
-  // Get the FID associated with this entityform
+  $query = db_select('submission_pdf', 's');
+  $query->condition('s.submission', $entity->entityform_id, '=')
+    ->fields('s');
+  $exists = $query->execute()->rowCount();
 
-  $entity_wrapper = entity_metadata_wrapper('entityform', $entity);
-  $entity_wrapper->value();
-  $fillpdf_object = fillpdf_merge_pdf($fid, NULL, NULL, NULL, TRUE, TRUE, TRUE, FALSE, NULL, NULL, $entity_wrapper, 'entityform');
+  if ($exists < 1) {
+    // Get the FID associated with this entityform
+    $entity_wrapper = entity_metadata_wrapper('entityform', $entity);
+    $entity_wrapper->value();
+    $fillpdf_object = fillpdf_merge_pdf($fid, NULL, NULL, NULL, TRUE, TRUE, TRUE, FALSE, NULL, NULL, $entity_wrapper, 'entityform');
 
-  $file = fillpdf_entity_save_to_file($fillpdf_object, _fillpdf_process_filename($fillpdf_object->info->title, $fillpdf_object->token_objects), false, false);
-  $url = file_create_url($file->uri);
-  drupal_goto($url);
+    $file = fillpdf_entity_save_to_file($fillpdf_object, _fillpdf_process_filename($fillpdf_object->info->title, $fillpdf_object->token_objects), false, false);
 
-  return $url;
+
+    $data = array(
+      'fid' => $file->fid,
+      'submission' => $entity->entityform_id,
+      'uid' => $entity->uid
+    );
+    drupal_write_record('submission_pdf', $data);
+  }
+  else {
+    $query = db_select('submission_pdf', 's');
+    $query->condition('s.submission', $entity->entityform_id, '=')
+      ->fields('s', array('fid'));
+    $fid = $query->execute()->fetchField();
+    $file = file_load($fid);
+  }
+  if (module_exists('pdf')) {
+    return theme('pdf_formatter_pages', array('file' => $file));
+  }
+  else {
+    $url = file_create_url($file->uri);
+    drupal_goto($url);
+  }
+
 }
 
 /**
@@ -124,7 +149,14 @@ function entityform_fillpdf_form_alter(&$form, $form_state, $form_id) {
 */
 function entityform_fillpdf_form_submit($form, &$form_state) {
   $values = $form_state['values'];
-  if ($values['fillpdf']['form']['file'] !== -1) {
+
+  // Case 1:  No File was uploaded.
+  if (empty($values['fillpdf']['form']['file']) && $values['fillpdf']['form']['fid'] == -1) {
+    // Do nothing.
+    return;
+  }
+  // Case 2: We are uploading a file.
+  else if ( $values['fillpdf']['form']['fid'] == -1 ) {
       $query = db_select('entityform_fillpdf');
       $query->fields('entityform_fillpdf', array('bundle'))
         ->condition('bundle', $values['type'], '=')
@@ -147,10 +179,39 @@ function entityform_fillpdf_form_submit($form, &$form_state) {
       $data = array('bundle' => $values['type'], 'fid' => $file->fid);
       drupal_write_record('entityform_fillpdf', $data);
   }
-  else {
+  // Case 3: Remove a PDF file from the form
+  else if ($values['fillpdf']['form']['fid'] !== -1 && empty($values['fillpdf']['form']['file'])){
     db_delete('entityform_fillpdf')
       ->condition('bundle', $values['type'])
       ->execute();
+  }
+  // Case 4: Removing old PDF and uploading a new PDF.
+  else if ( $values['fillpdf']['form']['fid'] !== $values['fillpdf']['form']['file'] ) {
+    db_delete('entityform_fillpdf')
+      ->condition('bundle', $values['type'])
+      ->execute();
+
+      $query = db_select('entityform_fillpdf');
+      $query->fields('entityform_fillpdf', array('bundle'))
+        ->condition('bundle', $values['type'], '=')
+        ->condition('fid', $values['fillpdf']['form']['file'], '=');
+      $exists = $query->execute()->rowCount();
+
+      // We need to replicate what _fillpdf_save_upload does here.
+      $file = file_load($values['fillpdf']['form']['file']);
+      db_insert('fillpdf_forms')
+        ->fields(array(
+          'fid' => $file->fid,
+          'title' => $file->filename,
+          'url' => $file->uri,
+          'scheme' => fillpdf_default_scheme(),
+        ))
+        ->execute();
+      file_usage_add($file, 'fillpdf', 'fillpdf_form', $file->fid);
+      fillpdf_parse_pdf($file->fid);
+      $primary_key = $exists < 1 ? array('bundle') : array();
+      $data = array('bundle' => $values['type'], 'fid' => $file->fid);
+      drupal_write_record('entityform_fillpdf', $data);
   }
 }
 

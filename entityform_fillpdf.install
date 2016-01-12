@@ -16,13 +16,33 @@ function entityform_fillpdf_schema() {
       )
     ),
   );
+
+  $schema['submission_pdf'] = array(
+    'fields' => array(
+      'submission' => array(
+        'type' => 'int'
+      ),
+      'fid' => array(
+        'type' => 'int'
+      ),
+      'uid' => array(
+        'type' => 'int'
+      )
+    )
+  );
   return $schema;
 }
 
 /**
-* Implements hook_update_7001
 * - Create database table for tracking attached PDFs.
 */
 function entityform_fillpdf_update_7001() {
   db_create_table('entityform_fillpdf', drupal_get_schema_unprocessed('entityform_fillpdf', 'entityform_fillpdf'));
+}
+
+/**
+* - Create database table for tracking submission PDFs.
+*/
+function entityform_fillpdf_update_7002() {
+  db_create_table('submission_pdf', drupal_get_schema_unprocessed('entityform_fillpdf', 'submission_pdf'));
 }
